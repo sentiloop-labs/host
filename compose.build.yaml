@@ -1,0 +1,3 @@
+# Add cognitive-loop's build context as ../cognitive-loop when its Dockerfile exists.
+# Give local builds a local image name and pull_policy: never.
+services: {}

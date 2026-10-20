@@ -1,0 +1,5 @@
+name: sentiloop
+
+# Add shared configuration only when a runnable service exists.
+# Raspberry Pi images must use ghcr.io/...@sha256:<digest> references.
+services: {}
