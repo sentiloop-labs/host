@@ -1,5 +1,7 @@
 name: sentiloop
 
-# Add shared configuration only when a runnable service exists.
-# Raspberry Pi images must use ghcr.io/...@sha256:<digest> references.
-services: {}
+services:
+  cognitive-loop:
+    image: sentiloop/cognitive-loop:host-integration
+    pull_policy: never
+    restart: unless-stopped

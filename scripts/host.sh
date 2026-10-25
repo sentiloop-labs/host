@@ -6,68 +6,77 @@ source scripts/platform.sh
 platform=$(detect_platform)
 command=${1:?Expected a Make target}
 
-compose=(docker compose --project-name sentiloop --env-file versions.env -f compose.yaml)
-if [ "$platform" = macos ]; then
+compose=(docker compose --project-name sentiloop --project-directory "$PWD" -f compose.yaml)
+if [ -f "platforms/$platform/compose.yaml" ]; then
+    compose+=(-f "platforms/$platform/compose.yaml")
+fi
+if [ "$platform" = macos ] && { [ "$command" = build ] || [ "$command" = start ]; }; then
     compose+=(-f compose.build.yaml)
 fi
 
+# Prepare the detected host: macOS needs no provisioning; Pi runs its provisioning
+# script as root, using non-interactive sudo when the caller is not already root.
 provision() {
     if [ "$platform" = macos ]; then
         echo 'macOS provisioning: nothing to do. Manage Docker Desktop separately.'
-    else
+    elif [ "$(id -u)" = 0 ]; then
         bash platforms/raspberry-pi/provision.sh
+    else
+        sudo -n bash platforms/raspberry-pi/provision.sh
     fi
 }
 
-services() {
-    "${compose[@]}" config --services
-}
-
-require_services() {
-    configured_services=$(services)
-    if [ -z "$configured_services" ]; then
-        echo 'No runnable services yet. cognitive-loop needs a Dockerfile before Compose wiring can be added.' >&2
-        exit 1
-    fi
-}
-
+# Enforce immutable GHCR image references for Pi. Read the effective Compose
+# image list and reject any reference without a ghcr.io path and SHA-256 digest.
 validate_images() {
+    local images image
     images=$("${compose[@]}" config --images)
     while IFS= read -r image; do
         [ -n "$image" ] || continue
-        if ! printf '%s\n' "$image" | grep -Eq '^ghcr\.io/[^[:space:]@]+@sha256:[0-9a-f]{64}$'; then
+        if ! [[ "$image" =~ ^ghcr\.io/[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; then
             echo "Refusing unpinned or non-GHCR image: $image" >&2
             exit 1
         fi
     done <<< "$images"
 }
 
+# Validate the configured image references, then ask Compose to pull every service
+# image explicitly. Pulling leaves existing containers untouched.
+pull_images() {
+    validate_images
+    "${compose[@]}" pull --policy always
+}
+
 case "$command" in
+    start|up)
+        if [ "$platform" = raspberry-pi ]; then
+            [ -f /var/lib/sentiloop/provisioned ] || provision
+            validate_images
+        fi
+        if [ "$command" = up ]; then
+            exec "${compose[@]}" up -d --no-build --pull never
+        elif [ "$platform" = macos ]; then
+            exec env COMPOSE_MENU=false "${compose[@]}" up --build --abort-on-container-exit
+        else
+            pull_images
+            exec env COMPOSE_MENU=false "${compose[@]}" up --no-build --pull never --abort-on-container-exit
+        fi
+        ;;
     provision) provision ;;
     build)
         if [ "$platform" = raspberry-pi ]; then
             echo 'Raspberry Pi uses prebuilt images; build skipped.'
         else
-            require_services
-            "${compose[@]}" build
+            exec "${compose[@]}" build
         fi
         ;;
-    up)
-        if [ "$platform" = raspberry-pi ]; then
-            # Do not trust markers from runtime-only verification. Full
-            # provisioning must be implemented before marker reuse is enabled.
-            provision
-            validate_images
-        fi
-        require_services
-        "${compose[@]}" up -d --no-build --pull never
-        ;;
-    down)
-        configured_services=$(services)
-        if [ -n "$configured_services" ]; then
-            "${compose[@]}" down
+    down|stop) exec "${compose[@]}" "$command" ;;
+    exec|restart)
+        service=${SERVICE:?Specify SERVICE, e.g. SERVICE=cognitive-loop}
+        if [ "$command" = exec ]; then
+            exec "${compose[@]}" exec --user root "$service" /bin/sh
         else
-            echo 'No services configured.'
+            exec "${compose[@]}" restart --no-deps "$service"
         fi
         ;;
     update)
@@ -82,12 +91,7 @@ case "$command" in
             }
             git -C "$repo" pull --ff-only
         else
-            validate_images
-            if [ -z "$images" ]; then
-                echo 'No pinned service images configured; nothing to pull.'
-                exit 0
-            fi
-            "${compose[@]}" pull --policy always
+            pull_images
         fi
         ;;
     *) echo "Unknown target: $command" >&2; exit 1 ;;

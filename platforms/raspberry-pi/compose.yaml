@@ -1,0 +1,4 @@
+services:
+  cognitive-loop:
+    image: ${COGNITIVE_LOOP_IMAGE:?Set COGNITIVE_LOOP_IMAGE to a published ghcr.io image pinned by sha256 digest}
+    platform: linux/arm64

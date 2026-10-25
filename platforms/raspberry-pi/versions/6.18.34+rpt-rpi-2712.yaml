@@ -1,0 +1,92 @@
+---
+- name: Provision the Raspberry Pi host
+  hosts: localhost
+  become: true
+  tasks:
+    - name: Require Raspberry Pi 5, Trixie ARM64 and system Python 3.13
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['distribution'] in ['Debian', 'Raspbian']
+          - ansible_facts['distribution_major_version'] == '13'
+          - ansible_facts['distribution_release'] == 'trixie'
+          - ansible_facts['architecture'] == 'aarch64'
+          - ansible_facts['userspace_bits'] == '64'
+          - ansible_facts['python']['version']['major'] == 3
+          - ansible_facts['python']['version']['minor'] == 13
+          - lookup('ansible.builtin.file', '/proc/device-tree/model') is match('Raspberry Pi 5 ')
+          - lookup('ansible.builtin.file', '/etc/rpi-issue') | length > 0
+
+    - name: Invalidate previous success until provisioning completes
+      ansible.builtin.file:
+        path: /var/lib/sentiloop/provisioned
+        state: absent
+
+    - name: Hold the nine verified installed kernel packages
+      ansible.builtin.dpkg_selections:
+        name: "{{ item }}"
+        selection: hold
+      loop:
+        - linux-headers-6.18.34+rpt-common-rpi
+        - linux-headers-6.18.34+rpt-rpi-2712
+        - linux-headers-6.18.34+rpt-rpi-v8
+        - linux-headers-rpi-2712
+        - linux-headers-rpi-v8
+        - linux-image-6.18.34+rpt-rpi-2712
+        - linux-image-6.18.34+rpt-rpi-v8
+        - linux-image-rpi-2712
+        - linux-image-rpi-v8
+
+    - name: Configure the official Docker repository and signing key
+      ansible.builtin.deb822_repository:
+        name: sentiloop-docker
+        uris: https://download.docker.com/linux/debian
+        suites: trixie
+        components: stable
+        architectures: arm64
+        signed_by: https://download.docker.com/linux/debian/gpg
+        install_python_debian: true
+
+    - name: Install matching kernel headers and DKMS build dependencies
+      ansible.builtin.apt:
+        name:
+          - "linux-headers-{{ ansible_facts['kernel'] }}"
+          - dkms
+          - build-essential
+        update_cache: true
+        fail_on_autoremove: true
+        install_recommends: false
+
+    - name: Install the kernel profile's exact package specifications
+      ansible.builtin.apt:
+        name:
+          - docker-ce=5:29.9.1-1~debian.13~trixie
+          - docker-ce-cli=5:29.9.1-1~debian.13~trixie
+          - containerd.io=2.4.2-2~debian.13~trixie
+          - docker-buildx-plugin=0.38.0-1~debian.13~trixie
+          - docker-compose-plugin=5.6.0-1~debian.13~trixie
+          - h10-hailort-pcie-driver=5.1.1
+          - imx500-all=1.14.0-1
+        fail_on_autoremove: true
+        install_recommends: false
+
+    - name: Activate the installed Hailo PCIe driver
+      ansible.builtin.command: modprobe hailo1x_pci
+      changed_when: false
+
+    - name: Enable and start Docker
+      ansible.builtin.systemd_service:
+        name: docker.service
+        enabled: true
+        state: started
+
+    - name: Ensure the provisioning marker directory exists
+      ansible.builtin.file:
+        path: /var/lib/sentiloop
+        state: directory
+        mode: '0755'
+
+    - name: Record success only after every task passes
+      ansible.builtin.copy:
+        dest: /var/lib/sentiloop/provisioned
+        content: "kernel={{ ansible_facts['kernel'] }}\n"
+        mode: '0644'
