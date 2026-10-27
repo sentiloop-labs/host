@@ -26,24 +26,8 @@ provision() {
     fi
 }
 
-# Enforce immutable GHCR image references for Pi. Read the effective Compose
-# image list and reject any reference without a ghcr.io path and SHA-256 digest.
-validate_images() {
-    local images image
-    images=$("${compose[@]}" config --images)
-    while IFS= read -r image; do
-        [ -n "$image" ] || continue
-        if ! [[ "$image" =~ ^ghcr\.io/[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; then
-            echo "Refusing unpinned or non-GHCR image: $image" >&2
-            exit 1
-        fi
-    done <<< "$images"
-}
-
-# Validate the configured image references, then ask Compose to pull every service
-# image explicitly. Pulling leaves existing containers untouched.
+# Ask Compose to pull every service image explicitly, leaving containers untouched.
 pull_images() {
-    validate_images
     "${compose[@]}" pull --policy always
 }
 
@@ -51,7 +35,6 @@ case "$command" in
     start|up)
         if [ "$platform" = raspberry-pi ]; then
             [ -f /var/lib/sentiloop/provisioned ] || provision
-            validate_images
         fi
         if [ "$command" = up ]; then
             exec "${compose[@]}" up -d --no-build --pull never

@@ -1,5 +1,7 @@
 # Sentiloop Host
 
+![Version](https://img.shields.io/badge/version-0.1.1-blue)
+
 Set up a Sentiloop host and run its application containers through Docker Compose.
 Use the same Make commands on Mac and Raspberry Pi; the scripts detect the platform.
 
@@ -8,7 +10,7 @@ Use the same Make commands on Mac and Raspberry Pi; the scripts detect the platf
 | Platform | Application images | Host setup |
 | --- | --- | --- |
 | Apple Silicon macOS | Built locally from sibling repositories | Install and run Docker Desktop separately |
-| Raspberry Pi 5, Raspberry Pi OS 64-bit, Debian 13 Trixie | Pulled from GHCR using immutable digests | Provisioned locally with Ansible |
+| Raspberry Pi 5, Raspberry Pi OS 64-bit, Debian 13 Trixie | Pulled from GHCR; `latest` by default or a chosen version tag | Provisioned locally with Ansible |
 
 The supported Pi kernel is `6.18.34+rpt-rpi-2712`. Other kernels and platforms
 are rejected.
@@ -43,7 +45,7 @@ Run these from the `host` directory.
 | Command | What it does |
 | --- | --- |
 | `make help` | List available commands |
-| `make start` | Mac: build and start. Pi: pull pinned images and start. Attach logs on both |
+| `make start` | Mac: build and start. Pi: pull configured images and start. Attach logs on both |
 | `make stop` | Stop containers without removing them |
 | `make build` | Build local images on Mac; skip on Pi |
 | `make up` | Start in the background using local images; never build or pull |
@@ -88,17 +90,18 @@ Successful completion writes `/var/lib/sentiloop/provisioned`. `start` and `up`
 provision automatically only when that marker is missing. Your user also needs
 Docker daemon access; provisioning does not change group membership.
 
-To run applications, set `COGNITIVE_LOOP_IMAGE` in your environment or an untracked
-`host/.env` file to a published ARM64 image reference:
+The Pi runs the private image `ghcr.io/sentiloop-labs/cognitive-loop:latest` by
+default. Authenticate to GHCR separately with `docker login ghcr.io`, then run
+`make start`. No application source checkout is needed on Pi.
 
-```text
-COGNITIVE_LOOP_IMAGE=ghcr.io/<organisation>/cognitive-loop@sha256:<digest>
+To deploy a specific published version instead:
+
+```sh
+COGNITIVE_LOOP_TAG=0.1.1 make start
 ```
 
-Replace the placeholders with the published image's details and authenticate to
-GHCR if it is private. Then run `make start`. No application source checkout is
-needed on Pi. Image publishing is not implemented yet, so deployment requires a
-published image first.
+You can also set `COGNITIVE_LOOP_TAG` in an untracked `host/.env` file. Use the same
+tag for subsequent `update` and `up` commands; `restart` keeps the existing container.
 
 Pi provisioning and hardware operation still require validation on the actual Pi,
 including DKMS builds, Hailo device access and camera capture.
@@ -118,5 +121,20 @@ playbook in `platforms/raspberry-pi/versions/`.
 
 Compose uses `compose.yaml` for shared service settings, adds
 `platforms/raspberry-pi/compose.yaml` on Pi, and adds `compose.build.yaml` for Mac
-builds and foreground starts. Local builds use `../cognitive-loop`; Pi images must
-be pinned to GHCR SHA-256 digests.
+builds and foreground starts. Local builds use `../cognitive-loop`; Pi uses the
+published GHCR image with `latest` or the chosen version tag.
+
+## Versioning
+
+Choose a version bump locally, alongside any uncommitted code changes:
+
+```sh
+bump-my-version bump patch
+bump-my-version bump minor
+bump-my-version bump major
+```
+
+Use one command for the intended change, then review and commit it yourself.
+Bump My Version updates `pyproject.toml` and the badge without creating commits or
+tags. Pushes to `main` create the numeric version tag on that commit if it does
+not already exist. No GitHub Releases or Docker images are published by this workflow.

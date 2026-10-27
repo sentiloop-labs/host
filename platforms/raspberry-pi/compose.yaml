@@ -1,4 +1,4 @@
 services:
   cognitive-loop:
-    image: ${COGNITIVE_LOOP_IMAGE:?Set COGNITIVE_LOOP_IMAGE to a published ghcr.io image pinned by sha256 digest}
+    image: ghcr.io/sentiloop-labs/cognitive-loop:${COGNITIVE_LOOP_TAG:-latest}
     platform: linux/arm64

@@ -1,0 +1,18 @@
+[project]
+name = "host"
+version = "0.1.1"
+
+[tool.bumpversion]
+allow_dirty = true
+commit = false
+tag = false
+
+[[tool.bumpversion.files]]
+filename = "pyproject.toml"
+search = 'version = "{current_version}"'
+replace = 'version = "{new_version}"'
+
+[[tool.bumpversion.files]]
+filename = "README.md"
+search = "https://img.shields.io/badge/version-{current_version}-blue"
+replace = "https://img.shields.io/badge/version-{new_version}-blue"

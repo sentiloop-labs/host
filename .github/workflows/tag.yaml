@@ -1,0 +1,31 @@
+name: Tag project version
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: host-version-tags
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Check out the triggering commit and existing tags
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Create and push the project version tag if absent
+        run: |
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          if git show-ref --verify --quiet "refs/tags/$version"; then
+            echo "Git tag $version already exists; leaving it unchanged."
+          else
+            git tag -- "$version" "$GITHUB_SHA"
+            git push origin "refs/tags/$version:refs/tags/$version"
+          fi
