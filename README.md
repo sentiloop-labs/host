@@ -1,6 +1,6 @@
 # Sentiloop Host
 
-![Version](https://img.shields.io/badge/version-0.3.0-blue)
+![Version](https://img.shields.io/badge/version-0.3.1-blue)
 
 Set up a Sentiloop host and run its application containers through Docker Compose.
 Use the same Make commands on Mac and Raspberry Pi; the scripts detect the platform.
@@ -34,9 +34,11 @@ With Docker Desktop running, open a terminal in `host` and run:
 make start
 ```
 
-This builds with Docker's layer cache, starts the containers and shows all service
-logs. **Press Ctrl+C to stop the containers.** They remain available for the next
-start, along with their logs.
+This builds with Docker's layer cache, starts the containers in the background and
+returns to the prompt. They keep running when you close the terminal.
+
+For attached debugging with combined service logs, use `make start-logs` instead.
+**Press Ctrl+C to stop the containers in this mode.**
 
 ## Commands
 
@@ -45,7 +47,9 @@ Run these from the `host` directory.
 | Command | What it does |
 | --- | --- |
 | `make help` | List available commands |
-| `make start` | Mac: build and start. Pi: pull configured images and start. Attach logs on both |
+| `make start` | Mac: build; Pi: pull configured images. Start detached on both |
+| `make start-logs` | Same preparation as `start`, then start attached with combined logs; Ctrl+C stops containers |
+| `make logs` | Follow all service logs with service prefixes; Ctrl+C closes only the viewer |
 | `make stop` | Stop containers without removing them |
 | `make build` | Build local images on Mac; skip on Pi |
 | `make up` | Start in the background using local images; never build or pull |
@@ -55,19 +59,37 @@ Run these from the `host` directory.
 | `make down` | Remove containers and networks; keep images and persistent volumes |
 | `make provision` | Run Pi provisioning; do nothing on Mac |
 
-For background operation, run `make build` on Mac or `make update` on Pi, then
-`make up`. View the current application's logs with:
+Use `make start` for normal background operation. To prepare images separately,
+run `make build` on Mac or `make update` on Pi, then `make up`.
+View combined stdout/stderr logs from every service with:
 
 ```sh
-docker compose logs cognitive-loop
+make logs
 ```
 
-`start` and `up` reuse unchanged containers and recreate them when their image or
-configuration changes. Edits made inside a container survive stop/restart, but are
-lost when it is recreated or removed with `down`.
+Leaving `make logs` does not stop or remove containers. `make start-logs` runs
+Compose in the foreground directly; it stops the stack if any service exits.
+
+`start`, `start-logs` and `up` reuse unchanged containers and recreate them when
+their image or configuration changes. Edits made inside a container survive
+stop/restart, but are lost when it is recreated or removed with `down`.
 
 On Mac, `update` uses `git pull --ff-only` and refuses uncommitted changes or a
 detached HEAD. Update this `host` repository separately.
+
+## Raspberry Pi reboot behaviour
+
+Provision the Pi and start the application explicitly the first time. Docker is
+enabled at boot, and services use `restart: unless-stopped`, so subsequent Pi
+reboots restore previously running containers using their existing images and
+configuration. No separate Compose boot service is needed.
+
+- `make stop` intentionally keeps containers stopped across reboots. Run
+  `make start` or `make up` to resume them.
+- `make down` removes containers, so a reboot cannot restore them. Start them
+  explicitly again to recreate them.
+- Boot does not pull images, build, provision, update source code or reconcile
+  Compose changes. Use `make start` explicitly to build/pull and apply changes.
 
 ## Set up a Raspberry Pi
 
@@ -118,8 +140,8 @@ The exact packages and configuration are in the
 [kernel playbook](platforms/raspberry-pi/versions/6.18.34+rpt-rpi-2712.yaml).
 
 Each explicit `make provision` runs Ansible again to apply the desired state.
-Successful completion writes `/var/lib/sentiloop/provisioned`. `start` and `up`
-provision automatically only when that marker is missing.
+Successful completion writes `/var/lib/sentiloop/provisioned`. `start`,
+`start-logs` and `up` provision automatically only when that marker is missing.
 
 Run `make provision` from your trusted administrator account: provisioning uses
 `SUDO_USER` to add that account to the `docker` group, preserving its other groups.
@@ -158,7 +180,7 @@ playbook in `platforms/raspberry-pi/versions/`.
 
 Compose uses `compose.yaml` for shared service settings, adds
 `platforms/raspberry-pi/compose.yaml` on Pi, and adds `compose.build.yaml` for Mac
-builds and foreground starts. Local builds use `../cognitive-loop`; Pi uses the
+`build`, `start` and `start-logs`. Local builds use `../cognitive-loop`; Pi uses the
 published GHCR image with `latest` or the chosen version tag.
 
 ## Versioning

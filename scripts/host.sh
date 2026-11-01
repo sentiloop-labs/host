@@ -10,7 +10,7 @@ compose=(docker compose --project-name sentiloop --project-directory "$PWD" -f c
 if [ -f "platforms/$platform/compose.yaml" ]; then
     compose+=(-f "platforms/$platform/compose.yaml")
 fi
-if [ "$platform" = macos ] && { [ "$command" = build ] || [ "$command" = start ]; }; then
+if [ "$platform" = macos ] && { [ "$command" = build ] || [ "$command" = start ] || [ "$command" = start-logs ]; }; then
     compose+=(-f compose.build.yaml)
 fi
 
@@ -32,19 +32,27 @@ pull_images() {
 }
 
 case "$command" in
-    start|up)
+    start|start-logs|up)
         if [ "$platform" = raspberry-pi ]; then
             [ -f /var/lib/sentiloop/provisioned ] || provision
         fi
         if [ "$command" = up ]; then
             exec "${compose[@]}" up -d --no-build --pull never
-        elif [ "$platform" = macos ]; then
-            exec env COMPOSE_MENU=false "${compose[@]}" up --build --abort-on-container-exit
+        fi
+        if [ "$command" = start-logs ]; then
+            start_options=(--abort-on-container-exit)
+        else
+            start_options=(-d)
+        fi
+        if [ "$platform" = macos ]; then
+            start_options+=(--build)
         else
             pull_images
-            exec env COMPOSE_MENU=false "${compose[@]}" up --no-build --pull never --abort-on-container-exit
+            start_options+=(--no-build --pull never)
         fi
+        exec env COMPOSE_MENU=false "${compose[@]}" up "${start_options[@]}"
         ;;
+    logs) exec "${compose[@]}" logs --follow ;;
     provision) provision ;;
     build)
         if [ "$platform" = raspberry-pi ]; then
