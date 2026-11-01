@@ -18,4 +18,4 @@ source /etc/os-release
 # APT skips matching packages and refuses removals or unattended downgrades.
 apt-get -o APT::Update::Error-Mode=any update
 apt-get --yes --no-remove --no-install-recommends -o Dpkg::Options::=--force-confold install \
-    git=1:2.47.3-0+deb13u1 vim=2:9.1.1230-2 make=4.4.1-2 python3-venv kmod
+    git=1:2.47.3-0+deb13u1 vim=2:9.1.1230-2+deb13u1 make=4.4.1-2 python3-venv kmod

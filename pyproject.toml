@@ -1,6 +1,6 @@
 [project]
 name = "host"
-version = "0.2.1"
+version = "0.2.2"
 
 [tool.bumpversion]
 allow_dirty = true
