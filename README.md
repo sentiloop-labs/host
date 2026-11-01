@@ -1,6 +1,6 @@
 # Sentiloop Host
 
-![Version](https://img.shields.io/badge/version-0.2.2-blue)
+![Version](https://img.shields.io/badge/version-0.3.0-blue)
 
 Set up a Sentiloop host and run its application containers through Docker Compose.
 Use the same Make commands on Mac and Raspberry Pi; the scripts detect the platform.
@@ -119,8 +119,13 @@ The exact packages and configuration are in the
 
 Each explicit `make provision` runs Ansible again to apply the desired state.
 Successful completion writes `/var/lib/sentiloop/provisioned`. `start` and `up`
-provision automatically only when that marker is missing. Your user also needs
-Docker daemon access; provisioning does not change group membership.
+provision automatically only when that marker is missing.
+
+Run `make provision` from your trusted administrator account: provisioning uses
+`SUDO_USER` to add that account to the `docker` group, preserving its other groups.
+Log out and reconnect afterwards so the new membership takes effect, then run
+`make start` without sudo. Direct root runs without a non-root `SUDO_USER` skip
+this membership change. Docker group membership grants root-equivalent access.
 
 The Pi runs the private image `ghcr.io/sentiloop-labs/cognitive-loop:latest` by
 default. Authenticate to GHCR separately with `docker login ghcr.io`, then run

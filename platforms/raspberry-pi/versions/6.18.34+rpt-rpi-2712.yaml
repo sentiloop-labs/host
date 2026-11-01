@@ -110,6 +110,13 @@
         enabled: true
         state: started
 
+    - name: Give the invoking administrator Docker group access
+      ansible.builtin.user:
+        name: "{{ lookup('ansible.builtin.env', 'SUDO_USER') }}"
+        groups: docker
+        append: true
+      when: lookup('ansible.builtin.env', 'SUDO_USER') not in ['', 'root']
+
     - name: Ensure the provisioning marker directory exists
       ansible.builtin.file:
         path: /var/lib/sentiloop
