@@ -1,6 +1,6 @@
 # Sentiloop Host
 
-![Version](https://img.shields.io/badge/version-0.1.1-blue)
+![Version](https://img.shields.io/badge/version-0.2.0-blue)
 
 Set up a Sentiloop host and run its application containers through Docker Compose.
 Use the same Make commands on Mac and Raspberry Pi; the scripts detect the platform.
@@ -71,17 +71,49 @@ detached HEAD. Update this `host` repository separately.
 
 ## Set up a Raspberry Pi
 
-Before provisioning, the Pi needs system Python 3.13 with venv/ensurepip support
-(`python3-venv`), the official Debian/Pi APT repositories and keyrings, and kmod.
-Run provisioning as root or with working noninteractive `sudo -n`:
+Start from the supported Raspberry Pi OS with system Python 3.13 and the official
+Debian/Pi APT repositories and keyrings. Before cloning this repository, download
+and run its standalone bootstrap using Python's standard library; Git, curl and
+an existing clone are not required. Run as root or with working noninteractive
+`sudo -n` (omit `sudo -n` when running as root):
 
 ```sh
+python3 - <<'PY'
+from pathlib import Path
+from urllib.request import urlopen
+
+url = "https://raw.githubusercontent.com/sentiloop-labs/host/main/platforms/raspberry-pi/bootstrap.sh"
+with urlopen(url, timeout=30) as response:
+    Path("sentiloop-bootstrap.sh").write_bytes(response.read())
+PY
+sudo -n bash sentiloop-bootstrap.sh
+```
+
+The bootstrap installs pinned Git, Vim and Make, plus Python venv support and
+kmod. Matching packages are skipped by APT; unavailable pins or required
+downgrades fail rather than silently substituting versions. The download URL
+requires the bootstrap to have been published on `main`.
+
+Then clone the public repository over HTTPS and provision it:
+
+```sh
+git clone https://github.com/sentiloop-labs/host.git
+cd host
 make provision
 ```
 
 This installs the pinned Docker, Hailo PCIe driver and IMX500 packages, matching
 kernel headers and DKMS build tools. It holds the nine verified kernel image/header
-packages, loads the Hailo driver, and enables Docker. It does not reboot the Pi.
+packages, loads the Hailo driver, and enables Docker. The provisioning entrypoint
+reruns the same bootstrap before starting Ansible; Vim installation belongs only
+to that script. Ansible installs `i2c-tools` at its verified exact package version.
+Existing Docker, Hailo and IMX500 package pins remain unchanged.
+
+Provisioning persistently enables GPIO I²C in `/boot/firmware/config.txt` and
+loads `i2c-dev` at boot through `/etc/modules-load.d/sentiloop-i2c.conf`. Existing
+boot settings and conditional sections are preserved. Reboot the Pi after first
+applying these I²C settings, or after changing them, before expecting `/dev/i2c-1`
+to be available. Provisioning does not reboot, scan the bus or move hardware.
 The exact packages and configuration are in the
 [kernel playbook](platforms/raspberry-pi/versions/6.18.34+rpt-rpi-2712.yaml).
 

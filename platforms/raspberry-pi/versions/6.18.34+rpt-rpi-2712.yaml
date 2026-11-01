@@ -69,6 +69,31 @@
         fail_on_autoremove: true
         install_recommends: false
 
+    - name: Install I²C diagnostic tools
+      ansible.builtin.apt:
+        name:
+          - i2c-tools=4.4-2
+        state: present
+        fail_on_autoremove: true
+        install_recommends: false
+
+    - name: Enable GPIO I²C persistently
+      ansible.builtin.blockinfile:
+        path: /boot/firmware/config.txt
+        insertafter: EOF
+        marker: "# {mark} Sentiloop I2C"
+        # Reset filters and overlay-parameter scope only for this appended block.
+        block: |
+          [all]
+          dtoverlay=
+          dtparam=i2c_arm=on
+
+    - name: Load the I²C userspace interface at boot
+      ansible.builtin.copy:
+        dest: /etc/modules-load.d/sentiloop-i2c.conf
+        content: "i2c-dev\n"
+        mode: '0644'
+
     - name: Activate the installed Hailo PCIe driver
       ansible.builtin.command: modprobe hailo1x_pci
       changed_when: false
