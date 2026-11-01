@@ -77,6 +77,12 @@
         fail_on_autoremove: true
         install_recommends: false
 
+    - name: Add ll alias for interactive Bash shells
+      ansible.builtin.lineinfile:
+        path: /etc/bash.bashrc
+        regexp: '^alias ll='
+        line: "alias ll='ls -als'"
+
     - name: Enable GPIO I²C persistently
       ansible.builtin.blockinfile:
         path: /boot/firmware/config.txt

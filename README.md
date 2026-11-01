@@ -1,6 +1,6 @@
 # Sentiloop Host
 
-![Version](https://img.shields.io/badge/version-0.2.0-blue)
+![Version](https://img.shields.io/badge/version-0.2.1-blue)
 
 Set up a Sentiloop host and run its application containers through Docker Compose.
 Use the same Make commands on Mac and Raspberry Pi; the scripts detect the platform.
