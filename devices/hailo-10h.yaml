@@ -1,0 +1,18 @@
+---
+- name: Collect Hailo-10H requirements
+  when: device_phase == 'collect'
+  block:
+    - name: Require the validated Hailo-10H platform
+      ansible.builtin.assert:
+        that:
+          - validated_platform == 'raspberry-pi-5-trixie-arm64-6.18.34+rpt-rpi-2712-python3.13'
+        fail_msg: Hailo-10H is supported only on the validated Pi 5 Trixie ARM64 kernel/Python profile.
+
+    - name: Add the Hailo-10H driver and its build prerequisites
+      ansible.builtin.set_fact:
+        package_requirements: "{{ package_requirements + ['linux-headers-' ~ ansible_facts['kernel'], 'dkms', 'build-essential', 'h10-hailort-pcie-driver=5.1.1'] }}"
+
+- name: Activate the installed Hailo PCIe driver
+  ansible.builtin.command: modprobe hailo1x_pci
+  changed_when: false
+  when: device_phase == 'configure'

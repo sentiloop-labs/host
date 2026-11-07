@@ -2,6 +2,10 @@
 - name: Provision the Raspberry Pi host
   hosts: localhost
   become: true
+  vars:
+    device_task_files:
+      hailo-10h: "{{ playbook_dir }}/../../../devices/hailo-10h.yaml"
+      imx500: "{{ playbook_dir }}/../../../devices/imx500.yaml"
   tasks:
     - name: Require Raspberry Pi 5, Trixie ARM64 and system Python 3.13
       ansible.builtin.assert:
@@ -13,8 +17,63 @@
           - ansible_facts['userspace_bits'] == '64'
           - ansible_facts['python']['version']['major'] == 3
           - ansible_facts['python']['version']['minor'] == 13
+          - ansible_facts['kernel'] == '6.18.34+rpt-rpi-2712'
           - lookup('ansible.builtin.file', '/proc/device-tree/model') is match('Raspberry Pi 5 ')
           - lookup('ansible.builtin.file', '/etc/rpi-issue') | length > 0
+
+    - name: Require an enabled-device list from the passed host configuration
+      ansible.builtin.assert:
+        that:
+          - host_config is defined
+          - host_config is mapping
+          - host_config['enabled_devices'] is defined
+          - host_config['enabled_devices'] | type_debug == 'list'
+        fail_msg: host_config.enabled_devices must be passed as a list; run make provision (use [] in config.toml for platform only).
+
+    - name: Require supported string device identifiers
+      ansible.builtin.assert:
+        that:
+          - item is string
+          - item in device_task_files
+        fail_msg: "Supported device identifiers are hailo-10h and imx500."
+      loop: "{{ host_config['enabled_devices'] }}"
+
+    - name: Reject duplicate devices
+      ansible.builtin.assert:
+        that:
+          - host_config['enabled_devices'] | unique | length == host_config['enabled_devices'] | length
+        fail_msg: enabled_devices must not contain duplicates.
+
+    - name: Collect platform requirements and reset per-run state
+      ansible.builtin.set_fact:
+        validated_platform: raspberry-pi-5-trixie-arm64-6.18.34+rpt-rpi-2712-python3.13
+        # A fixed order keeps device execution independent of configuration order.
+        selected_devices: "{{ ['hailo-10h', 'imx500'] | select('in', host_config['enabled_devices']) | list }}"
+        package_requirements:
+          - docker-ce=5:29.9.1-1~debian.13~trixie
+          - docker-ce-cli=5:29.9.1-1~debian.13~trixie
+          - containerd.io=2.4.2-2~debian.13~trixie
+          - docker-buildx-plugin=0.38.0-1~debian.13~trixie
+          - docker-compose-plugin=5.6.0-1~debian.13~trixie
+          - i2c-tools=4.4-2
+
+    - name: Collect selected device requirements without configuration
+      ansible.builtin.include_tasks: "{{ device_task_files[device] }}"
+      loop: "{{ selected_devices }}"
+      loop_control:
+        loop_var: device
+      vars:
+        device_phase: collect
+
+    - name: Deduplicate identical package requirements
+      ansible.builtin.set_fact:
+        package_requirements: "{{ package_requirements | unique | list }}"
+
+    - name: Reject conflicting specifications for the same package
+      ansible.builtin.assert:
+        that:
+          - package_requirements | map('regex_replace', '=.*$', '') | unique | length == package_requirements | length
+        fail_msg: "Conflicting package requirements: {{ package_requirements }}"
 
     - name: Invalidate previous success until provisioning completes
       ansible.builtin.file:
@@ -46,34 +105,11 @@
         signed_by: https://download.docker.com/linux/debian/gpg
         install_python_debian: true
 
-    - name: Install matching kernel headers and DKMS build dependencies
+    - name: Install the collected platform and device package specifications
       ansible.builtin.apt:
-        name:
-          - "linux-headers-{{ ansible_facts['kernel'] }}"
-          - dkms
-          - build-essential
-        update_cache: true
-        fail_on_autoremove: true
-        install_recommends: false
-
-    - name: Install the kernel profile's exact package specifications
-      ansible.builtin.apt:
-        name:
-          - docker-ce=5:29.9.1-1~debian.13~trixie
-          - docker-ce-cli=5:29.9.1-1~debian.13~trixie
-          - containerd.io=2.4.2-2~debian.13~trixie
-          - docker-buildx-plugin=0.38.0-1~debian.13~trixie
-          - docker-compose-plugin=5.6.0-1~debian.13~trixie
-          - h10-hailort-pcie-driver=5.1.1
-          - imx500-all=1.14.0-1
-        fail_on_autoremove: true
-        install_recommends: false
-
-    - name: Install I²C diagnostic tools
-      ansible.builtin.apt:
-        name:
-          - i2c-tools=4.4-2
+        name: "{{ package_requirements }}"
         state: present
+        update_cache: true
         fail_on_autoremove: true
         install_recommends: false
 
@@ -100,9 +136,13 @@
         content: "i2c-dev\n"
         mode: '0644'
 
-    - name: Activate the installed Hailo PCIe driver
-      ansible.builtin.command: modprobe hailo1x_pci
-      changed_when: false
+    - name: Configure selected devices after I²C and before Docker
+      ansible.builtin.include_tasks: "{{ device_task_files[device] }}"
+      loop: "{{ selected_devices }}"
+      loop_control:
+        loop_var: device
+      vars:
+        device_phase: configure
 
     - name: Enable and start Docker
       ansible.builtin.systemd_service:

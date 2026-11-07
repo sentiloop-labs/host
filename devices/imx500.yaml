@@ -1,0 +1,13 @@
+---
+- name: Collect IMX500 requirements
+  when: device_phase == 'collect'
+  block:
+    - name: Require the validated IMX500 platform
+      ansible.builtin.assert:
+        that:
+          - validated_platform == 'raspberry-pi-5-trixie-arm64-6.18.34+rpt-rpi-2712-python3.13'
+        fail_msg: IMX500 is supported only on the validated Pi 5 Trixie ARM64 kernel/Python profile.
+
+    - name: Add the IMX500 package
+      ansible.builtin.set_fact:
+        package_requirements: "{{ package_requirements + ['imx500-all=1.14.0-1'] }}"

@@ -14,17 +14,45 @@ if [ "$platform" = macos ] && { [ "$command" = build ] || [ "$command" = start ]
     compose+=(-f compose.build.yaml)
 fi
 
+python=/usr/bin/python3
+
+# Print one field of the captured snapshot: strings raw, other values as JSON.
+snapshot_get() {
+    printf '%s' "$snapshot" | "$python" -c '
+import json, sys
+value = json.load(sys.stdin)
+for key in sys.argv[1:]:
+    value = value[key]
+print(value if isinstance(value, str) else json.dumps(value))
+' "$@"
+}
+
+# Read config.toml once per command; every consumer uses this snapshot.
+load_config() {
+    snapshot=$("$python" scripts/config.py)
+    host_config=$(snapshot_get config)
+    COGNITIVE_LOOP_TAG=$(snapshot_get compose_env COGNITIVE_LOOP_TAG)
+    export COGNITIVE_LOOP_TAG
+}
+
 # Prepare the detected host: macOS needs no provisioning; Pi runs its provisioning
 # script as root, using non-interactive sudo when the caller is not already root.
+# The configuration is passed as an argument because sudo drops custom variables.
 provision() {
     if [ "$platform" = macos ]; then
         echo 'macOS provisioning: nothing to do. Manage Docker Desktop separately.'
     elif [ "$(id -u)" = 0 ]; then
-        bash platforms/raspberry-pi/provision.sh
+        bash platforms/raspberry-pi/provision.sh "$host_config"
     else
-        sudo -n bash platforms/raspberry-pi/provision.sh
+        sudo -n bash platforms/raspberry-pi/provision.sh "$host_config"
     fi
 }
+
+if [ "$platform" = raspberry-pi ]; then
+    case "$command" in
+        start|start-logs|up|update|provision) load_config ;;
+    esac
+fi
 
 # Ask Compose to pull every service image explicitly, leaving containers untouched.
 pull_images() {

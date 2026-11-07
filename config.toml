@@ -1,0 +1,4 @@
+enabled_devices = ["hailo-10h", "imx500"]
+
+[image_tags]
+cognitive_loop = "latest"
